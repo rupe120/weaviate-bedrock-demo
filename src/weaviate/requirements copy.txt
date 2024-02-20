@@ -1,0 +1,8 @@
+requests
+aws-lambda-powertools[tracer]
+weaviate_client==3.19.2
+anthropic==0.2.9
+urllib3==1.26.16
+validators==0.20.0
+boto3==1.28.60
+botocore==1.31.60

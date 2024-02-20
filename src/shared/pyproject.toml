@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weaviate_demo_shared"
+version = "0.0.1"
+authors = [
+    { name="Josh Russo", email="jrusso@innovativesol.com" },
+]
+description = "Shared code for the Weaviate demo project"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+"aws-lambda-powertools[tracer]",
+"boto3",
+"pydantic",
+"weaviate_client==3.19.2"
+]

@@ -1,0 +1,12 @@
+{
+    "Parameters": {
+        "LOG_LEVEL": "DEBUG",
+        "POWERTOOLS_METRICS_NAMESPACE": "index",
+        "POWERTOOLS_SERVICE_NAME": "weaviate-example",
+        "REGION_ID": "us-west-1",
+        "WEAVIATE_AUTH_API_KEY_ARN": "arn:aws:secretsmanager:us-east-1:###:secret:/weaviate-bedrock-demo-env/weaviate-auth-api-key-dIj3Jt",
+        "WEAVIATE_ENDPOINT_URL_ARN": "arn:aws:secretsmanager:us-east-1:###:secret:/weaviate-bedrock-demo-env/weaviate-endpoint-url-hKCUZv",
+        "WEAVIATE_INFERENCE_ENGINE_API_KEY_ARN": "arn:aws:secretsmanager:us-east-1:###:secret:/weaviate-bedrock-demo-env/weaviate-embedding-engine-api-key-UYLnTE",
+        "DEBUG_PROCESSING": "true"
+    }
+}

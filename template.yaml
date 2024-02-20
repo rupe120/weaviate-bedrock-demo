@@ -1,0 +1,429 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  weaviate-bedrock-example
+
+  Powertools example
+
+Parameters:
+  ObjectsToIndexSQSARN: 
+    Description: The ARN of the SQS Queue from which to pull index events. Visibility timeout must be greater than or equal to the IndexFunction Lambda timeout (300s).
+    Type: String
+  ObjectsToIndexS3Name: 
+    Description: The Name of the S3 Bucket from which to pull index events.
+    Type: String
+  ObjectsToIndexS3KMSKeyId:
+    Description: The ID of the KMS Key used to encrypt Objects in the S3 Bucket from which to pull index events.
+    Type: String
+  QueryMaximumResults:
+    Description: The maximum number of results to return from a query
+    Type: Number
+    Default: 1000
+
+Globals: # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html
+  Function:
+    Timeout: 900
+    MemorySize: 2048
+    Tracing: Active
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
+    LoggingConfig:
+      LogFormat: JSON
+    Environment:
+      Variables:
+          POWERTOOLS_SERVICE_NAME: 'WeaviateExample'
+          POWERTOOLS_METRICS_NAMESPACE: Powertools
+          LOG_LEVEL: INFO
+          WEAVIATE_ENDPOINT_URL_ARN: !Ref WeaviateEndpointURLSecret
+          WEAVIATE_AUTH_API_KEY_ARN: !Ref WeaviateAuthAPIKeySecret
+          WEAVIATE_INFERENCE_ENGINE_API_KEY_ARN: !Ref WeaviateEmbeddingEngineAPIKeySecret
+          QUERY_MAXIMUM_RESULTS: !Ref QueryMaximumResults
+          QUERY_DEFAULTS_LIMIT: !Ref QueryMaximumResults
+    VpcConfig:                    # Add VpcConfig to specify the VPC and subnets
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref LambdaSubnetA
+          - !Ref LambdaSubnetB
+    Architectures:
+      - x86_64
+      
+  Api:
+    TracingEnabled: true
+
+Resources:
+  #####################################
+  ## Secrets                         ##
+  #####################################
+  WeaviateEndpointURLSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub '/${AWS::StackName}/weaviate-endpoint-url'
+      Description: The API endpoint used by the Weaviate client to perform indexing and embedding queries.
+      SecretString: REPLACE_ME
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+  WeaviateAuthAPIKeySecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub '/${AWS::StackName}/weaviate-auth-api-key'
+      Description: The API key used by the Weaviate client to perform indexing and embedding queries.
+      SecretString: 'REPLACE_ME'
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+  WeaviateEmbeddingEngineAPIKeySecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub '/${AWS::StackName}/weaviate-embedding-engine-api-key'
+      Description: The Embedding Engine API key passed to the Weaviate client to perform vectorization.
+      SecretString: 'REPLACE_ME'
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  #####################################
+  ## S3                              ##
+  #####################################
+  
+  DocumentsToIndexS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'weaviate-bedrock-example-${AWS::AccountId}-${AWS::Region}-documents-to-index'
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt DocumentsToIndexSQSQueue.Arn
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  DocumentsToIndexSQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'weaviate-bedrock-example-${AWS::AccountId}-${AWS::Region}-documents-to-index'
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  #####################################
+  ## API                             ##
+  #####################################
+  
+  API:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      Cors:
+        AllowMethods: "'OPTIONS,GET,POST'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      Tags:
+        LambdaPowertools: python
+        AppName: 'WeaviateExample'
+
+  APIKey:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn: # This prevents a race condition where the api key may be created before the ApiGateway Stage is created
+      - APIProdStage
+    Properties:
+      Description: !Sub '${AWS::StackName}APIKey Generated in CloudFormation'
+      Enabled: true
+      GenerateDistinctId: false
+      StageKeys:
+        - RestApiId: !Ref API
+          StageName: 'Prod'
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  APIUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: # This prevents a race condition where the usage plan may be created before the ApiGateway Stage is created
+      - APIProdStage
+    Properties:
+      ApiStages: 
+        - ApiId: !Ref API
+          Stage: Prod     
+      Description: !Sub '${AWS::StackName} usage plan'
+      Quota:
+        Limit: 5000
+        Period: MONTH
+      UsagePlanName: !Sub '${AWS::StackName}-usage-plan'
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  APIUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: 
+      - API
+    Properties:
+      KeyId: !Ref APIKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref APIUsagePlan
+
+  #####################################
+  ## VPC                             ##
+  #####################################
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: "10.0.0.0/16"
+      Tags:
+        - Key: AppName
+          Value: 'WeaviateExample'
+
+  #####################################
+  ## VPC Endpoint for Bedrock Config ##
+  #####################################
+  BedrockVPCInterfaceEndpointSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Allow HTTPS traffic from the VPC to the Bedrock Service Endpoint'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !GetAtt VPC.CidrBlock
+    Condition: IsBedrockCondition
+
+
+  BedrockVPCInterfaceEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: 'Interface'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.bedrock'
+      VpcId: !Ref VPC
+      SubnetIds: 
+        - !Ref LambdaSubnetA
+        - !Ref LambdaSubnetB
+      SecurityGroupIds:
+        - !Ref BedrockVPCInterfaceEndpointSecurityGroup
+    Condition: IsBedrockCondition
+
+  #####################################
+  ## Public Subnet Configuration     ##
+  #####################################
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: "10.0.0.0/24"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: !Ref VPC
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: GatewayToInternet
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+
+
+  #####################################
+  ## Lambda VPC Subnet Configuration ##
+  #####################################
+
+  LambdaRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  LambdaRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LambdaRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+
+  LambdaSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: "10.0.1.0/24" # ~16k ip's available for Lambda instances
+      VpcId: !Ref VPC
+
+  LambdaSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: "10.0.2.0/24" # ~16k ip's available for Lambda instances
+      VpcId: !Ref VPC
+
+  LambdaSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref LambdaSubnetA
+      RouteTableId: !Ref LambdaRouteTable
+
+  LambdaSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref LambdaSubnetB
+      RouteTableId: !Ref LambdaRouteTable
+
+  # don't allow any specific inbound / outbound => by default inbound traffic is allowed from within the security group and
+  # by default all outbound traffic is allowed (though the outbound traffic might be blocked by something else)
+  # => if you need to call a Lambda function from outside this security group, you should allow this somehow here or
+  # put the other function into this security group as well.
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Lambda Security Group"
+      VpcId: !Ref VPC
+
+  # INDEXING
+  IndexEmbeddingsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: !Sub '${AWS::StackName}-IndexFunction-python3.11'
+      DockerContext: ./src # Set the context to ./src to allow access to ./handlers/shared
+      Dockerfile: ./index/Dockerfile
+    Properties:
+      PackageType: Image
+      Description: Index a file
+      Tracing: Active
+      VpcConfig:                    # Add VpcConfig to specify the VPC and subnets
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref LambdaSubnetA
+          - !Ref LambdaSubnetB
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn:
+              Ref: WeaviateEndpointURLSecret
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn:
+              Ref: WeaviateAuthAPIKeySecret
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn:
+              Ref: WeaviateEmbeddingEngineAPIKeySecret
+        - S3ReadPolicy:
+            BucketName:
+              Ref: ObjectsToIndexS3Name
+        - Statement:
+          - Sid: BedrockInvoke
+            Effect: Allow
+            Action:
+            - bedrock:InvokeModel
+            Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+      Events:
+        IndexSQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !Ref DocumentsToIndexSQSQueue
+            BatchSize: 1
+            ScalingConfig:
+              MaximumConcurrency: 2
+      Environment:
+        Variables:
+          POWERTOOLS_METRICS_NAMESPACE: Index
+          INFERENCE_ENGINE_API_PROVIDER: !Ref InferenceEngineApiProvider
+          INFERENCE_ENGINE_API_PROVIDER: !Ref IndexingInferenceEngineApiProvider
+          DEBUG_PROCESSING: "false"
+          DEBUG_INDEXING_ROW_LIMIT: "5"
+          CERTAINTY_THRESHOLD_FOR_SKILL_MATCHING: !Ref CertaintyThresholdForSkillMatching
+          CERTAINTY_THRESHOLD_FOR_SKILL_ADDING: !Ref CertaintyThresholdForSkillAdding
+  
+  QueryFunctionAPI:
+    Type: AWS::Serverless::Function     # More info about Function Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html
+    Metadata:
+      DockerTag: !Sub '${AWS::StackName}-QueryFunction-python3.11'
+      DockerContext: ./src # Set the context to ./src to allow access to ./handlers/shared
+      Dockerfile: ./weaviate/Dockerfile
+    Properties:
+      # Handler: app.lambda_handler
+      # CodeUri: weaviate
+      PackageType: Image
+      FunctionName: !Sub '${AWS::StackName}-QueryAPI'
+      Description: Hello World function
+      # Architectures:
+      # - x86_64
+      Tracing: Active
+      Events:
+        HelloPath:
+          Type: Api           # More info about API Event Source: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-function-api.html
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref API
+             # Powertools env vars: https://awslabs.github.io/aws-lambda-powertools-python/#environment-variables
+        HelloPathProxy:
+          Type: Api           # More info about API Event Source: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-function-api.html
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref API
+             # Powertools env vars: https://awslabs.github.io/aws-lambda-powertools-python/#environment-variables
+
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: PowertoolsWeaviate
+          LOG_LEVEL: INFO
+      Tags:
+        LambdaPowertools: python
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+Outputs:
+  WeaviateApi:
+    Description: API Gateway endpoint URL for Prod environment for Hello World Function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/weaviate"
+
+  QueryFunctionAPIArn:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt QueryFunctionAPI.Arn
+

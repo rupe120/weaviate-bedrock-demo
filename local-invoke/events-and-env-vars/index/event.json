@@ -1,0 +1,22 @@
+{
+   "Records": [
+      {
+         "messageId": "bbb9c4e5-edc8-4df2-a8cc-f0a31b12e069",
+         "receiptHandle": "AQEBPOwJURY3eQg/DerLGEk6SoNbPlR/RDPkJnIanoHwZQlqX+ovbqxLn6Fk4rUilq4IZJewoWkXtDNMjafRVjjABOrnUOsmQmvFnJ77EbHtDt3i4VGrkF2Me+d2HhVNB15ilD2Mi/QJZAc+tD5TXpXj9n7CPdgZxegund5JNKhvEBTzexAQZCi4jDYJWCvAljiIjVQuigxo0VphLXYAby3PhaHqsEcDCbzNUzF78ufGJZlQNDzwbhttIComgwzlqCfUe6jRLCgL8Hohxhqf3EeOsoqDhCNZNoFw/2N4IN/VwR4cTioxlbfdUVotb2kJg/UpCplgKg9UqRpFXo9sa85CgBJP4oSR8p0IymQj32JBDxURs4lqdc4xeitvloG4+s5FSTGZRnmHsdVc9T2xav+ilR1Z06JS6/60gQlN2/QoUaaeqdcmwUyQ6s2rM3H6lRxM",
+         
+         "body": "{\"Records\":[{\"eventVersion\":\"2.1\",\"eventSource\":\"aws:s3\",\"awsRegion\":\"us-east-1\",\"eventTime\":\"2024-02-05T17:46:17.506Z\",\"eventName\":\"ObjectCreated:Put\",\"userIdentity\":{\"principalId\":\"AWS:AROAS64EUO6WLUTTM5EBU:jrusso@innovativesol.com\"},\"requestParameters\":{\"sourceIPAddress\":\"38.49.92.107\"},\"responseElements\":{\"x-amz-request-id\":\"S5B2K9ZZVZ80VV3G\",\"x-amz-id-2\":\"Mi46szIVbL0cyYFQuLphAaSqC3vpjjpWM3Y4nS+PqPsXShOrXuzYHEBirdw6Ef7l2vEMwU5w/D3aKRnka7xTcA5SK87yD0cp\"},\"s3\":{\"s3SchemaVersion\":\"1.0\",\"configurationId\":\"object-create\",\"bucket\":{\"name\":\"weaviate-example-staging\",\"ownerIdentity\":{\"principalId\":\"A3PRVCI05PRDY\"},\"arn\":\"arn:aws:s3:::weaviate-example-staging\"},\"object\":{\"key\":\"subtitle-test/en.vtt\",\"size\":17544,\"eTag\":\"b855412af13ac12ab8bdd70ffb5a7d3c\",\"sequencer\":\"0065C11EE94D7E427D\"}}}]}",
+         
+         "attributes": {
+               "ApproximateReceiveCount": "3",
+               "SentTimestamp": "1702654041451",
+               "SenderId": "AROA4R74ZO52XAB5OD7T4:S3-PROD-END",
+               "ApproximateFirstReceiveTimestamp": "1702654041466"
+         },
+         "messageAttributes": {},
+         "md5OfBody": "d55d72529140136c9026afac7e6ab7f2",
+         "eventSource": "aws:sqs",
+         "eventSourceARN": "xxx",         
+         "awsRegion": "us-east-1"
+      }
+   ]
+}
